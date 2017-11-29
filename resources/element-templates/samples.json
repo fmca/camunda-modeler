@@ -147,6 +147,28 @@
     }
   },
   {
+    "name": "PRISM",
+    "id": "br.ufpe.cin.bpmnprism",
+    "appliesTo": [
+      "bpmn:SequenceFlow"
+    ],
+    "properties": [
+      {
+        "label": "Rate/Probability",
+        "type": "String",
+        "value": "1",
+        "binding": {
+          "type": "property",
+          "name": "prism:probability"
+        }
+      }
+    ],
+    "entriesVisible": {
+      "_all": true,
+      "asyncBefore": false
+    }
+  },
+  {
     "name": "Custom ServiceTask",
     "id": "com.camunda.example.CustomServiceTask",
     "appliesTo": [
@@ -161,6 +183,13 @@
         "binding": {
           "type": "property",
           "name": "camunda:delegateExpression"
+        },
+        "constraints": {
+          "notEmpty": true,
+          "pattern": {
+            "value": "^[+-]?(?:\\d+\\.?\\d*|\\d*\\.\\d+)$",
+            "message": "Must be a number"
+          }
         }
       }
     ],
