@@ -1,10 +1,15 @@
 var inherits = require('inherits'),
 domify = require('domify'),
 parseString = require('xml2js').parseString,
-JSPath = require('jspath');
+JSPath = require('jspath'),
+nunjuncks = require('nunjucks'),
+fs = require('fs'),
+exec = require('child_process').exec;
 
 var BaseEditor = require('./base-editor');
 var debug = require('debug')('prism-editor');
+
+var _code, _formula, _formulaBtn;
 /**
  * A prism editor
  *
@@ -28,10 +33,6 @@ PRISMEditor.prototype.render = function() {
            onAppend={ this.compose('mountEditor') }
            onRemove={ this.compose('unmountEditor') }>
       </div>
-      <span className="formula-group">
-        <input type="text" className="formula-input" placeholder="Formula" />
-        <button className="formula-button">Check</button>
-      </span>
     </div>
   );
 };
@@ -62,11 +63,10 @@ PRISMEditor.prototype.update = function() {
       }
 
       this.lastXML = newXML;
-
-      console.log(newXML)
+      console.log('the new xml', newXML)
       this.getParser().parse(newXML)
     
-      this.emit('updated', {});
+      this.emit('updated', newXML);
     };
 
 
@@ -83,18 +83,96 @@ PRISMEditor.prototype.saveXML = function(done) {
 
 
 PRISMEditor.prototype.destroy = function() {
-
+  
 };
 
 PRISMEditor.prototype.getParser = function () {
+  var self = this;
     return {
         parse: function (str) {
             parseString(str, function (err, result) {
+                console.log('parsed', err, result)
                 var tasks = JSPath.apply('.."bpmn:task"', result)
                 var startEvents = JSPath.apply('.."bpmn:startEvent"', result)
                 var endEvents = JSPath.apply('.."bpmn:endEvent"', result)
-                console.log(tasks, startEvents, endEvents)
+                var states = tasks.concat(startEvents).concat(endEvents)
+                var transitions = JSPath.apply('.."bpmn:sequenceFlow"', result)
+                var defaultRate = "1"
+                transitions.forEach(function(element) {
+                  var rate = defaultRate
+                  var customRates = JSPath.apply('.."camunda:property"{.."name"==="prism:rate"}', element)
+                  if (customRates.length) {
+                    rate = customRates[0].$.value
+                  }
+                  element.rate = rate
+                }, this);
+                var renderedTemplate = self.renderTemplate(states, transitions)
+                self.getCodeElement().innerText = renderedTemplate                
             })
         }
     }
+}
+
+
+PRISMEditor.prototype.renderTemplate = function (states, transitions) {
+  var template = `
+  ctmc
+  
+  {% for state in states %}
+  const int {{state.$.id}} = {{loop.index - 1}};
+  {%- endfor %}
+
+  module bpmn
+
+      state: [0..{{ states.length - 1}}] init 0;
+
+      {% for transition in transitions %}
+      [] state={{transition.$.sourceRef}} -> {{transition.rate}}:(state'={{transition.$.targetRef}});
+      {%- endfor %}
+  
+  endmodule
+  `
+  return nunjuncks.renderString(template, { states, transitions })
+
+}
+
+PRISMEditor.prototype.getCodeElement = function () {
+  var self = this
+  if (_code) {
+    return _code
+  }
+
+  _formula = domify('<input type="text" placeholder="Formula" />')
+  _formulaBtn = domify('<button className="formula-button">Check</button>')
+  _formulaBtn.onclick = function () {
+    console.log('formula', _formula.value)
+    self.checkProperty(_code.innerText, _formula.value)
+  }
+  _code = domify('<pre><code></code></pre>');
+  this.$el.appendChild(_formula)
+  this.$el.appendChild(_formulaBtn)
+  this.$el.appendChild(_code)
+
+  return _code
+}
+
+PRISMEditor.prototype.checkProperty = function (prismModel, prismProperty) {
+  var filename = '/tmp/prismmodel.prism'
+  fs.writeFile(filename, prismModel , function(err) {
+      if(err) {
+          return console.log(err);
+      }
+
+      exec(`prism ${filename} -pf '${prismProperty}'`, (err, stdout, stderr) => {
+        if (err) {
+          console.log(err)
+          return;
+        }
+      
+        // the *entire* stdout and stderr (buffered)
+        console.log(`stdout: ${stdout}`);
+        console.log(`stderr: ${stderr}`);
+      });
+
+  }); 
 }

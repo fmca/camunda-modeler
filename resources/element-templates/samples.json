@@ -154,18 +154,19 @@
     ],
     "properties": [
       {
-        "label": "Rate/Probability",
+        "label": "Rate",
         "type": "String",
         "value": "1",
         "binding": {
-          "type": "property",
-          "name": "prism:probability"
+          "type": "camunda:property",
+          "name": "prism:rate"
         }
       }
     ],
     "entriesVisible": {
       "_all": true,
-      "asyncBefore": false
+      "asyncBefore": false,
+      "implementation": true
     }
   },
   {
