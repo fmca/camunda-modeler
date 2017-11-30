@@ -147,7 +147,7 @@
     }
   },
   {
-    "name": "PRISM",
+    "name": "PRISM Transition",
     "id": "br.ufpe.cin.bpmnprism",
     "appliesTo": [
       "bpmn:SequenceFlow"

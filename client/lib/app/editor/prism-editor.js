@@ -66,7 +66,7 @@ PRISMEditor.prototype.update = function() {
       console.log('the new xml', newXML)
       this.getParser().parse(newXML)
     
-      this.emit('updated', newXML);
+      this.emit('updated', {});
     };
 
 
@@ -95,9 +95,9 @@ PRISMEditor.prototype.getParser = function () {
                 var tasks = JSPath.apply('.."bpmn:task"', result)
                 var startEvents = JSPath.apply('.."bpmn:startEvent"', result)
                 var endEvents = JSPath.apply('.."bpmn:endEvent"', result)
-                var states = tasks.concat(startEvents).concat(endEvents)
+                var states = startEvents.concat(tasks).concat(endEvents)
                 var transitions = JSPath.apply('.."bpmn:sequenceFlow"', result)
-                var defaultRate = "1"
+                var defaultRate = ""
                 transitions.forEach(function(element) {
                   var rate = defaultRate
                   var customRates = JSPath.apply('.."camunda:property"{.."name"==="prism:rate"}', element)
@@ -115,11 +115,11 @@ PRISMEditor.prototype.getParser = function () {
 
 
 PRISMEditor.prototype.renderTemplate = function (states, transitions) {
-  var template = `
-  ctmc
+  var template = `  
+  pta
   
   {% for state in states %}
-  const int {{state.$.id}} = {{loop.index - 1}};
+  const int {{state.$.id}} = {{loop.index - 1}}; {% if state.$.name %} //{{state.$.name}} {%- endif %}
   {%- endfor %}
 
   module bpmn
@@ -127,7 +127,7 @@ PRISMEditor.prototype.renderTemplate = function (states, transitions) {
       state: [0..{{ states.length - 1}}] init 0;
 
       {% for transition in transitions %}
-      [] state={{transition.$.sourceRef}} -> {{transition.rate}}:(state'={{transition.$.targetRef}});
+      [] state={{transition.$.sourceRef}} -> {% if transition.rate %}{{transition.rate}}:{%- endif %}(state'={{transition.$.targetRef}}); {% if transition.$.name %} //{{transition.$.name}} {%- endif %}
       {%- endfor %}
   
   endmodule
