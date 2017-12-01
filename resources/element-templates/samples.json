@@ -147,8 +147,36 @@
     }
   },
   {
+    "name": "Prism Process",
+    "id": "br.cin.ufpe.bpmnprism.process",
+    "appliesTo": [
+      "bpmn:Process"
+    ],
+    "properties": [
+      {
+        "label": "Model Type",
+        "type": "Dropdown",
+        "value": "dtmc",
+        "binding": {
+          "type": "camunda:property",
+          "name": "prism:model:type"
+        },
+        "choices": [
+          { "name": "DTMC", "value": "dtmc" },
+          { "name": "MDP", "value": "mdp" },
+          { "name": "CTMC", "value": "ctmc" },
+          { "name": "PTA", "value": "pta" }
+        ]
+      }
+    ],
+    "entriesVisible": {
+      "_all": true,
+      "asyncBefore": false
+    }
+  },
+  {
     "name": "PRISM Transition",
-    "id": "br.ufpe.cin.bpmnprism",
+    "id": "br.ufpe.cin.bpmnprism.transition",
     "appliesTo": [
       "bpmn:SequenceFlow"
     ],
@@ -160,6 +188,38 @@
         "binding": {
           "type": "camunda:property",
           "name": "prism:rate"
+        }
+      }
+    ],
+    "entriesVisible": {
+      "_all": true,
+      "asyncBefore": false,
+      "implementation": true
+    }
+  },
+  {
+    "name": "PRISM Reward",
+    "id": "br.ufpe.cin.bpmnprism.reward",
+    "appliesTo": [
+      "bpmn:Task"
+    ],
+    "properties": [
+      {
+        "label": "Name",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "camunda:property",
+          "name": "prism:reward:name"
+        }
+      },
+      {
+        "label": "Value",
+        "type": "String",
+        "value": "",
+        "binding": {
+          "type": "camunda:property",
+          "name": "prism:reward:value"
         }
       }
     ],
