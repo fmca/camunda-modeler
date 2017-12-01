@@ -182,8 +182,8 @@ PRISMEditor.prototype.getCodeElement = function () {
     return _code
   }
 
-  _formula = domify('<input type="text" placeholder="Property" />')
-  _formulaBtn = domify('<button className="formula-button">Check</button>')
+  _formula = domify('<input type="text" class="prism-input" placeholder="Property" />')
+  _formulaBtn = domify('<button class="prism-button">Check</button>')
   _formulaBtn.onclick = function () {
     console.log('formula', _formula.value)
     self.checkProperty(_code.innerText, _formula.value)
