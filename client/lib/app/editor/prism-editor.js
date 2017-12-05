@@ -96,15 +96,13 @@ PRISMEditor.prototype.getParser = function () {
                 var modelType = JSPath.apply('.."camunda:property"{.."name"==="prism:model:type"}', result)
                 var process = JSPath.apply('.."bpmn:process"', result)[0]
                 modelType = (modelType.length ? modelType[0].$.value : defaultModelType);
-                var tasks = JSPath.apply('.."bpmn:task"', result)
-                var startEvents = JSPath.apply('.."bpmn:startEvent"', result)
-                var endEvents = JSPath.apply('.."bpmn:endEvent"', result)
-                var states = startEvents.concat(tasks).concat(endEvents)
+                var states = getStates(result)
                 var transitions = JSPath.apply('.."bpmn:sequenceFlow"', result)
                 var rewards = JSPath.apply('.."camunda:property"{.."name"==="prism:reward:name"}', result)
                 console.log('rewards', rewards)
                 transitions.forEach(function(element) {
-                  setRate(element)                  
+                  setRate(element)
+                  checkSync(element, result)            
                 }, this);
                 states.forEach(function(element) {
                   setRewards(element)
@@ -116,7 +114,22 @@ PRISMEditor.prototype.getParser = function () {
     }
 }
 
-var setRate = function(transition, model) {
+var getStates = function(model) {
+  var tasks = JSPath.apply('.."bpmn:task"', model)
+  tasks.forEach(e => e.$.tag='task')
+  var exclusiveGateways = JSPath.apply('.."bpmn:exclusiveGateway"', model)
+  exclusiveGateways.forEach(e => e.$.tag='exclusiveGateway')
+  var parallelGateways = JSPath.apply('.."bpmn:parallelGateway"', model)
+  parallelGateways.forEach(e => e.$.tag='parallelGateway')
+  var startEvents = JSPath.apply('.."bpmn:startEvent"', model)
+  startEvents.forEach(e => e.$.tag='startEvent')
+  var endEvents = JSPath.apply('.."bpmn:endEvent"', model)
+  endEvents.forEach(e => e.$.tag='endEvent')
+  var states = startEvents.concat(tasks).concat(exclusiveGateways).concat(parallelGateways).concat(endEvents)
+  return states
+}
+
+var setRate = function(transition) {
   var rate = undefined
   var customRates =
     JSPath.apply('.."camunda:property"{.."name"==="prism:rate"}', transition)
@@ -124,6 +137,14 @@ var setRate = function(transition, model) {
     rate = customRates[0].$.value
   }
   transition.rate = rate
+}
+
+var checkSync = function (transition, model) {
+  var source = transition.$.sourceRef
+  var paralellGateways = JSPath.apply(`.."bpmn:exclusiveGateway"{.."id"==="${source}"}`, model)
+  if (paralellGateways.length) {
+    transition.syncLabel = `${source}_${transition.$.id}`
+  }
 }
 
 var setRewards = function (state) {
@@ -139,38 +160,54 @@ var setRewards = function (state) {
       value: customRewardValues[0].$.value
     }
   }
-  console.log(state)
   state.reward = reward
-  console.log(state)
 }
 
 PRISMEditor.prototype.renderTemplate = function (process, modelType, states, transitions, rewards) {
   var template = `  
   {{modelType}}
-  
+
   {% for state in states %}
-  const int {{state.$.id}} = {{loop.index - 1}}; {% if state.$.name %} //{{state.$.name}} {%- endif %}
-  {%- endfor %}
-
-  module {{process.$.id}}
-
-      state: [0..{{ states.length - 1}}] init 0;
-
-      {% for transition in transitions %}
-      [] state={{transition.$.sourceRef}} -> {% if transition.rate %}{{transition.rate}}:{%- endif %}(state'={{transition.$.targetRef}}); {% if transition.$.name %} //{{transition.$.name}} {%- endif %}
-      {%- endfor %}
+  module {{state.$.id}}_module
+    {{state.$.id}}: [0..1] init 0;
+    {%- set hasIncomingTransition = false %}
+    {% for transition in transitions %}
+    {%- if transition.$.targetRef === state.$.id %}
+    {%- set hasIncomingTransition = true %}
+    [{{transition.syncLabel if transition.syncLabel else transition.$.sourceRef}}] {{state.$.id}}=0 -> {% if transition.rate %}{{transition.rate}}:{%- endif %}({{state.$.id}}' = 1);
+    {%- if state.$.tag !== 'exclusiveGateway' %}
+    [{{state.$.id}}] {{state.$.id}}=1 -> ({{state.$.id}}' = 0);    
+    {%- endif %}
+    {%- endif %}
+    {%- if transition.$.sourceRef === state.$.id and state.$.tag == 'exclusiveGateway' %}
+    [{{state.$.id}}_{{transition.$.id}}] {{state.$.id}}=1 -> ({{state.$.id}}' = 0);
+    {%- endif %}
+    {%- endfor %}
+    {%- if not hasIncomingTransition %}
+    [{{state.$.id}}] {{state.$.id}}=0 -> ({{state.$.id}}'=1);
+    {%- endif %}
   
   endmodule
+  {% endfor %}
 
   {% for reward in rewards %}
   rewards "{{reward.$.value}}"
     {%- for state in states %}
     {%- if state.reward.name === reward.$.value %}
-    state = {{state.$.id}} : {{state.reward.value}};
+    {{state.$.id}} = 1 : {{state.reward.value}};
     {%- endif %}
     {%- endfor %}
   endrewards
   {% endfor %}
+
+  rewards "tasks"
+    {%- for state in states %}
+    {%- if state.$.tag === 'task' %}
+    {{state.$.id}} = 1 : 1;
+    {%- endif %}
+    {%- endfor %}
+  endrewards
+
   `
   return nunjuncks.renderString(template, { process, modelType, states, transitions, rewards })
 
@@ -218,14 +255,13 @@ PRISMEditor.prototype.checkProperty = function (prismModel, prismProperty) {
         if (err) {
           _errorDiv.innerText = err
           console.log(err)
-          return;
         }
       
         // the *entire* stdout and stderr (buffered)
         _resultDiv.innerText = `${stdout.split('\n').filter(function (str) {
           return str.indexOf('Result') >= 0 || str.indexOf('Error') >= 0;
         })} `
-        _errorDiv.innerText = `${stderr}`;
+        _errorDiv.innerText += `${stderr}`;
       });
 
   }); 
