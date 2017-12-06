@@ -10,6 +10,8 @@ var BaseEditor = require('./base-editor');
 var debug = require('debug')('prism-editor');
 
 var _code, _formula, _formulaBtn, _errorDiv, _resultDiv;
+
+var lastBPMNJson = undefined
 /**
  * A prism editor
  *
@@ -92,6 +94,7 @@ PRISMEditor.prototype.getParser = function () {
         parse: function (str) {
             parseString(str, function (err, result) {
                 console.log('parsed', err, result)
+                lastBPMNJson = result
                 var defaultModelType = 'dtmc'
                 var modelType = JSPath.apply('.."camunda:property"{.."name"==="prism:model:type"}', result)
                 var process = JSPath.apply('.."bpmn:process"', result)[0]
@@ -169,7 +172,7 @@ PRISMEditor.prototype.renderTemplate = function (process, modelType, states, tra
 
   {% for state in states %}
   module {{state.$.id}}_module
-    {{state.$.id}}: [0..1] init 0;
+    {{state.$.id}}: [0..1] init 0; {%- if state.$.name %} //{{state.$.name}}{%-endif %}
     {%- set hasIncomingTransition = false %}
     {% for transition in transitions %}
     {%- if transition.$.targetRef === state.$.id %}
@@ -242,8 +245,22 @@ PRISMEditor.prototype.resetMessages = function () {
   _resultDiv.innerText = ''
 }
 
+var preProcessProperty = function (prismProperty) {
+  var states = getStates(lastBPMNJson)
+  console.log('preprocessing', states.length)
+  states.forEach(function(state) {
+    console.log('each', state)
+    if(state.$.name) {
+      console.log('replacing', state.$.name)
+      prismProperty = prismProperty.replace(state.$.name, state.$.id)
+    }
+  })
+  return prismProperty
+}
+
 PRISMEditor.prototype.checkProperty = function (prismModel, prismProperty) {
   var filename = '/tmp/prismmodel.prism'
+  var preProcessedProperty = preProcessProperty(prismProperty)
   this.resetMessages()
   fs.writeFile(filename, prismModel , function(err) {
       if(err) {
@@ -251,7 +268,7 @@ PRISMEditor.prototype.checkProperty = function (prismModel, prismProperty) {
           return console.log(err);
       }
 
-      exec(`prism ${filename} -pf '${prismProperty}'`, (err, stdout, stderr) => {
+      exec(`prism ${filename} -pf '${preProcessedProperty}'`, (err, stdout, stderr) => {
         if (err) {
           _errorDiv.innerText = err
           console.log(err)
