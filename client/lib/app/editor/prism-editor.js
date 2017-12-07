@@ -86,6 +86,7 @@ PRISMEditor.prototype.destroy = function() {
   
 };
 
+
 PRISMEditor.prototype.getParser = function () {
   var self = this;
     return {
@@ -97,11 +98,12 @@ PRISMEditor.prototype.getParser = function () {
                 var process = JSPath.apply('.."bpmn:process"', result)[0]
                 modelType = (modelType.length ? modelType[0].$.value : defaultModelType);
                 var tasks = JSPath.apply('.."bpmn:task"', result)
+                var exclusiveGateways = JSPath.apply('.."bpmn:exclusiveGateway"', result)
                 var startEvents = JSPath.apply('.."bpmn:startEvent"', result)
                 var endEvents = JSPath.apply('.."bpmn:endEvent"', result)
-                var states = startEvents.concat(tasks).concat(endEvents)
+                var states = startEvents.concat(exclusiveGateways).concat(tasks).concat(endEvents)
                 var transitions = JSPath.apply('.."bpmn:sequenceFlow"', result)
-                var rewards = JSPath.apply('.."camunda:property"{.."name"==="prism:reward:name"}', result)
+                var rewards = [... (new Set(JSPath.apply('.."camunda:property"{.."name"==="prism:reward:name"}', result).map(r => r.$.value)))]
                 console.log('rewards', rewards)
                 transitions.forEach(function(element) {
                   setRate(element)                  
@@ -163,9 +165,9 @@ PRISMEditor.prototype.renderTemplate = function (process, modelType, states, tra
   endmodule
 
   {% for reward in rewards %}
-  rewards "{{reward.$.value}}"
+  rewards "{{reward}}"
     {%- for state in states %}
-    {%- if state.reward.name === reward.$.value %}
+    {%- if state.reward.name === reward %}
     state = {{state.$.id}} : {{state.reward.value}};
     {%- endif %}
     {%- endfor %}
@@ -209,24 +211,24 @@ PRISMEditor.prototype.checkProperty = function (prismModel, prismProperty) {
   var filename = '/tmp/prismmodel.prism'
   this.resetMessages()
   fs.writeFile(filename, prismModel , function(err) {
-      if(err) {
-          _errorDiv.innerText = err
-          return console.log(err);
-      }
+    if(err) {
+      _errorDiv.innerText = err
+      return console.log(err);
+    }
 
-      exec(`prism ${filename} -pf '${prismProperty}'`, (err, stdout, stderr) => {
-        if (err) {
-          _errorDiv.innerText = err
-          console.log(err)
-          return;
-        }
-      
-        // the *entire* stdout and stderr (buffered)
-        _resultDiv.innerText = `${stdout.split('\n').filter(function (str) {
-          return str.indexOf('Result') >= 0 || str.indexOf('Error') >= 0;
-        })} `
-        _errorDiv.innerText = `${stderr}`;
-      });
+    exec(`prism ${filename} -pf '${prismProperty}'`, (err, stdout, stderr) => {
+      if (err) {
+        _errorDiv.innerText = err
+        console.log(err)
+      }
+    
+      // the *entire* stdout and stderr (buffered)
+      _resultDiv.innerText = `${stdout.split('\n').filter(function (str) {
+        return str.indexOf('Result') >= 0 || str.indexOf('Error') >= 0;
+      })} `
+      _errorDiv.innerText += `${stderr}`;
+    });
+
 
   }); 
 }
