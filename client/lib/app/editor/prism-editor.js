@@ -106,8 +106,11 @@ PRISMEditor.prototype.getParser = function () {
                 var rewards = [... (new Set(JSPath.apply('.."camunda:property"{.."name"==="prism:reward:name"}', result).map(r => r.$.value)))]
                 console.log('rewards', rewards)
                 transitions.forEach(function(element) {
-                  setRate(element)                  
+                  setRate(element, transitions, modelType)                  
                 }, this);
+                if (modelType === 'ctmc' || modelType === 'dtmc' ) {
+                  transitions = transformTransitions(transitions)
+                }
                 states.forEach(function(element) {
                   setRewards(element)
                 })
@@ -118,14 +121,30 @@ PRISMEditor.prototype.getParser = function () {
     }
 }
 
-var setRate = function(transition, model) {
+var setRate = function(transition, transitions, modelType) {
   var rate = undefined
   var customRates =
     JSPath.apply('.."camunda:property"{.."name"==="prism:rate"}', transition)
   if (customRates.length) {
     rate = customRates[0].$.value
+  } else if(modelType === 'dtmc' || modelType === 'ctmc') {
+    rate = 1/transitions.filter(t => t.$.sourceRef === transition.$.sourceRef).length
   }
   transition.rate = rate
+}
+
+var transformTransitions = function (transitions) {
+  var transformed = {}
+  transitions.forEach(function(t) {
+    transformed[t.$.sourceRef] = []
+  })
+  transitions.forEach(function(t) {
+    transformed[t.$.sourceRef].push(t)
+  })
+  var listTransformed = Object.keys(transformed).map(sourceRef => {
+    return {source: sourceRef, list: transformed[sourceRef]}
+  })
+  return listTransformed
 }
 
 var setRewards = function (state) {
@@ -159,7 +178,11 @@ PRISMEditor.prototype.renderTemplate = function (process, modelType, states, tra
       state: [0..{{ states.length - 1}}] init 0;
 
       {% for transition in transitions %}
-      [] state={{transition.$.sourceRef}} -> {% if transition.rate %}{{transition.rate}}:{%- endif %}(state'={{transition.$.targetRef}}); {% if transition.$.name %} //{{transition.$.name}} {%- endif %}
+      {%- if modelType === 'dtmc' or modelType === 'ctmc' %}
+      [] state={{transition.source}} -> {%-for target in transition.list %} {% if target.rate %}{{target.rate}}:{%- endif %}(state'={{target.$.targetRef}}) {%- if loop.last %};{%- else %} + {%-endif%} {%- endfor %}
+      {%- else %}
+      [] state={{transition.$.sourceRef}} -> {% if transition.rate %}{{transition.rate}}:{%- endif %}(state'={{transition.$.targetRef}});
+      {%- endif %}
       {%- endfor %}
   
   endmodule
